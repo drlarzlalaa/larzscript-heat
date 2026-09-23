@@ -1,0 +1,16 @@
+| Scheme | r    | Steps | Peak height | Largest error | Verdict               |
+|--------|------|-------|-------------|---------------|-----------------------|
+| ftcs   | 0.1  | 1000  | 0.282       | 7.07e-05      | accurate              |
+| ftcs   | 0.25 | 400   | 0.282       | 8.81e-05      | accurate              |
+| ftcs   | 0.4  | 250   | 0.282       | 0.000247      | accurate              |
+| ftcs   | 0.5  | 200   | 0.563       | 0.281         | stable but inaccurate |
+| ftcs   | 0.51 | 196   | 627         | 627           | blew up               |
+| ftcs   | 0.6  | 43    | over 1000   | -             | blew up               |
+| ftcs   | 1    | 13    | over 1000   | -             | blew up               |
+| cn     | 0.5  | 200   | 0.282       | 0.000176      | accurate              |
+| cn     | 1    | 100   | 0.282       | 0.000172      | accurate              |
+| cn     | 5    | 20    | 0.328       | 0.046         | stable but inaccurate |
+| cn     | 25   | 4     | 5.99        | 5.7           | stable but inaccurate |
+| cn     | 50   | 2     | 8.03        | 7.75          | stable but inaccurate |
+
+Everything is run to t = 1. The true peak height is 0.282; a spike start has height 10, so anything above that has blown up.

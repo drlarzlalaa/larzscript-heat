@@ -1,0 +1,20 @@
+ftcs, r = 0.6 (time step 0.006), 33 steps to t = 0.198
+total heat 1, variance 0.396 (exact 2Dt = 0.396), largest error 49500, peak 49470
+| x | simulated   | exact      |
+|---|-------------|------------|
+| 0 | -49468      | 0.63396    |
+| 1 | -8621       | 0.17935    |
+| 2 | -30.755     | 0.0040612  |
+| 3 | -0.00026458 | 7.3603e-06 |
+| 4 | 0           | 1.0677e-09 |
+verdict: blew up
+cn, r = 5 (time step 0.05), 20 steps to t = 1
+total heat 1, variance 2 (exact 2Dt = 2), largest error 0.046, peak 0.328
+| x | simulated | exact     |
+|---|-----------|-----------|
+| 0 | 0.32805   | 0.28209   |
+| 1 | 0.21973   | 0.2197    |
+| 2 | 0.10373   | 0.10378   |
+| 3 | 0.02969   | 0.029733  |
+| 4 | 0.0051734 | 0.0051667 |
+verdict: stable but inaccurate

@@ -1,0 +1,30 @@
+ftcs, r = 0.4 (time step 0.004), 250 steps to t = 1
+total heat 1, variance 2 (exact 2Dt = 2), largest error 0.000247, peak 0.2818
+| x | simulated | exact     |
+|---|-----------|-----------|
+| 0 | 0.28185   | 0.28209   |
+| 1 | 0.21968   | 0.2197    |
+| 2 | 0.10393   | 0.10378   |
+| 3 | 0.029765  | 0.029733  |
+| 4 | 0.0051379 | 0.0051667 |
+verdict: accurate
+ftcs, r = 0.25 (time step 0.0025), 200 steps to t = 0.5
+total heat 1, variance 1 (exact 2Dt = 1), largest error 0.000249, peak 0.3987
+| x | simulated | exact      |
+|---|-----------|------------|
+| 0 | 0.39869   | 0.39894    |
+| 1 | 0.24207   | 0.24197    |
+| 2 | 0.054047  | 0.053991   |
+| 3 | 0.004404  | 0.0044318  |
+| 4 | 0.0001293 | 0.00013383 |
+verdict: accurate
+cn, r = 1 (time step 0.01), 200 steps to t = 2
+total heat 0.999999, variance 3.99988 (exact 2Dt = 4), largest error 6.16e-05, peak 0.1995
+| x | simulated | exact    |
+|---|-----------|----------|
+| 0 | 0.19953   | 0.19947  |
+| 1 | 0.17606   | 0.17603  |
+| 2 | 0.12096   | 0.12099  |
+| 3 | 0.064722  | 0.064759 |
+| 4 | 0.026981  | 0.026995 |
+verdict: accurate

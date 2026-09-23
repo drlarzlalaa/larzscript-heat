@@ -1,0 +1,220 @@
+# LarzHeat - heat diffusion, and when a simulation of it can be trusted,
+# written entirely in Larzscript.
+#
+#   larzscript heat.lz run --scheme=ftcs --r=0.4
+#   larzscript heat.lz run --scheme=cn --r=5
+#   larzscript heat.lz stability
+#
+# The 1-D heat equation u_t = D u_xx, on x from -10 to 10 (201 points,
+# dx = 0.1, D = 1), started from a spike of unit area in the middle cell.
+# Its exact solution is a bell curve (Gaussian) whose variance grows as
+# 2 D t: the width of a diffusing cloud is proportional to sqrt(t).
+#
+# Two ways to step it forward, with r = D dt / dx^2:
+#
+#   ftcs  explicit: each point moves toward the average of its neighbours.
+#         Cheap, but stable only for r <= 1/2; above that, rounding-sized
+#         wiggles double every step and the answer explodes.
+#   cn    Crank-Nicolson: solves a tridiagonal system each step (Thomas
+#         algorithm). Stable at any r, but a stable answer is not always a
+#         good one - the spike start is not smooth, and at large r it rings.
+#
+# Each run reports the total heat (which must stay 1), the variance against
+# the exact 2Dt, the largest error against the exact Gaussian, and the peak
+# height (the true peak never exceeds 0.282). tools/reference.py is an
+# independent Python implementation; the tests were written only after both
+# agreed.
+
+import "cli" as cli
+import "table" as table
+import "args" as argmod
+
+fn fail(msg) { print("error: " + msg); exit(1) }
+
+fn number(s, what) {
+  let x = nil
+  try { x = float(s) } catch e { fail(what + " must be a number, got '" + str(s) + "'") }
+  return x
+}
+
+# x with at most n significant digits, written out in full (no exponent),
+# so the output is the same on every Larzscript version.
+fn sig(x, n) {
+  if x == 0 { return "0" }
+  let a = x < 0 ? -x : x
+  let e = 0
+  while a >= 10.0 { a = a / 10.0; e = e + 1 }
+  while a < 1.0 { a = a * 10.0; e = e - 1 }
+  if round(a, n - 1) >= 10.0 { e = e + 1 }
+  let d = n - 1 - e
+  if d >= 0 { return str(round(x, d)) }
+  let scale = 1.0
+  let k = 0
+  while k < -d { scale = scale * 10.0; k = k + 1 }
+  return str(int(round(x / scale, 0) * scale))
+}
+
+let N = 201
+let DX = 0.1
+let D = 1.0
+let PI = 3.141592653589793
+let SPIKE = 10.0
+
+# e^x for x <= 0: halve the argument ten times, sum the Taylor series, square back.
+fn exp_neg(x) {
+  let z = x / 1024.0
+  let term = 1.0
+  let total = 1.0
+  let n = 1
+  while n < 14 { term = term * z / n; total = total + term; n = n + 1 }
+  let k = 0
+  while k < 10 { total = total * total; k = k + 1 }
+  return total
+}
+
+fn xs(i) { return (i - 100) * DX }
+
+fn exact(x, t) { return exp_neg(-x * x / (4 * D * t)) / sqrt(4 * PI * D * t) }
+
+fn start() {
+  let u = [0.0] * N
+  u[100] = SPIKE
+  return u
+}
+
+fn ftcs(u, r) {
+  let n = [0.0] * N
+  let i = 1
+  while i < N - 1 {
+    n[i] = u[i] + r * (u[i - 1] - 2 * u[i] + u[i + 1])
+    i = i + 1
+  }
+  return n
+}
+
+# Crank-Nicolson with zero at both ends; the tridiagonal system is solved by the Thomas algorithm.
+fn cn(u, r) {
+  let m = N - 2
+  let a = -r / 2
+  let b = 1 + r
+  let c = -r / 2
+  let cp = [0.0] * m
+  let dp = [0.0] * m
+  let rhs0 = r / 2 * u[0] + (1 - r) * u[1] + r / 2 * u[2]
+  cp[0] = c / b
+  dp[0] = rhs0 / b
+  let i = 1
+  while i < m {
+    let rhs = r / 2 * u[i] + (1 - r) * u[i + 1] + r / 2 * u[i + 2]
+    let den = b - a * cp[i - 1]
+    cp[i] = c / den
+    dp[i] = (rhs - a * dp[i - 1]) / den
+    i = i + 1
+  }
+  let x = [0.0] * m
+  x[m - 1] = dp[m - 1]
+  i = m - 2
+  while i >= 0 {
+    x[i] = dp[i] - cp[i] * x[i + 1]
+    i = i - 1
+  }
+  let out = [0.0] * N
+  i = 0
+  while i < m { out[i + 1] = x[i]; i = i + 1 }
+  return out
+}
+
+fn peak(u) {
+  let m = 0.0
+  for v in u {
+    let a = v < 0 ? -v : v
+    if a > m { m = a }
+  }
+  return m
+}
+
+# Runs to t_end (or until the values pass 1e6, which means it has blown up).
+# Returns [profile, time reached, steps taken].
+fn simulate(scheme, r, t_end) {
+  let dt = r * DX * DX / D
+  let steps = round(t_end / dt)
+  let u = start()
+  let k = 0
+  while k < steps {
+    u = scheme == "ftcs" ? ftcs(u, r) : cn(u, r)
+    k = k + 1
+    if peak(u) > 1000000.0 { break }
+  }
+  return [u, k * dt, k]
+}
+
+# [mass, variance, largest error against the exact Gaussian]
+fn stats(u, t) {
+  let mass = 0.0
+  let second = 0.0
+  let err = 0.0
+  let i = 0
+  while i < N {
+    mass = mass + u[i] * DX
+    second = second + u[i] * xs(i) * xs(i) * DX
+    let e = u[i] - exact(xs(i), t)
+    if e < 0 { e = -e }
+    if e > err { err = e }
+    i = i + 1
+  }
+  return [mass, second / mass, err]
+}
+
+fn verdict(u, err) {
+  if peak(u) > SPIKE { return "blew up" }
+  if err > 0.01 { return "stable but inaccurate" }
+  return "accurate"
+}
+
+fn cmd_run(a) {
+  let scheme = str(argmod.flag(a, "scheme", "ftcs")).lower()
+  if not (scheme == "ftcs" or scheme == "cn") { fail("--scheme must be ftcs or cn, got '" + scheme + "'") }
+  let r = number(argmod.flag(a, "r", "0.4"), "--r")
+  let t = number(argmod.flag(a, "t", "1"), "--t")
+  if r <= 0 or r > 100 { fail("--r must be above 0 and at most 100, got " + sig(r, 6)) }
+  if t <= 0 or t > 10 { fail("--t must be above 0 and at most 10, got " + sig(t, 6)) }
+  if round(t / (r * DX * DX / D)) > 6000 { fail("--t / --r would take more than 6000 steps; use a larger --r or a smaller --t") }
+  let sim = simulate(scheme, r, t)
+  let u = sim[0]
+  if sim[2] < 1 { fail("--t is smaller than a single time step (" + sig(r * DX * DX / D, 6) + ")") }
+  let s = stats(u, sim[1])
+  print(scheme + ", r = " + sig(r, 6) + " (time step " + sig(r * DX * DX / D, 6) + "), " + str(sim[2]) + " steps to t = " + sig(sim[1], 6))
+  print("total heat " + sig(s[0], 6) + ", variance " + sig(s[1], 6) + " (exact 2Dt = " + sig(2 * D * sim[1], 6) + "), largest error " + sig(s[2], 3) + ", peak " + sig(peak(u), 4))
+  let rows = [["x", "simulated", "exact"]]
+  let k = 0
+  while k < 5 {
+    rows.push([str(k), sig(u[100 + k * 10], 5), sig(exact(k * 1.0, sim[1]), 5)])
+    k = k + 1
+  }
+  print(table.render(rows))
+  print("verdict: " + verdict(u, s[2]))
+}
+
+fn cmd_stability(a) {
+  let rows = [["Scheme", "r", "Steps", "Peak height", "Largest error", "Verdict"]]
+  let cases = [["ftcs", [0.1, 0.25, 0.4, 0.5, 0.51, 0.6, 1.0]], ["cn", [0.5, 1.0, 5.0, 25.0, 50.0]]]
+  for c in cases {
+    for r in c[1] {
+      let sim = simulate(c[0], r, 1.0)
+      let s = stats(sim[0], sim[1])
+      let p = peak(sim[0])
+      let shown = p > 1000.0 ? "over 1000" : sig(p, 3)
+      let err = p > 1000.0 ? "-" : sig(s[2], 3)
+      rows.push([c[0], sig(r, 3), str(sim[2]), shown, err, verdict(sim[0], s[2])])
+    }
+  }
+  print(table.render(rows))
+  print("")
+  print("Everything is run to t = 1. The true peak height is 0.282; a spike start has height " + sig(SPIKE, 3) + ", so anything above that has blown up.")
+}
+
+let app = cli.new("heat", "heat diffusion and when a simulation of it can be trusted, in Larzscript")
+cli.command(app, "run", "one simulation against the exact Gaussian: run [--scheme=ftcs|cn] [--r=0.4] [--t=1]", fn(a) { cmd_run(a) })
+cli.command(app, "stability", "both schemes over a range of r: stability", fn(a) { cmd_stability(a) })
+
+cli.run(app, args)

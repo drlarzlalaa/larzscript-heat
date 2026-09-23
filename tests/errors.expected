@@ -1,0 +1,8 @@
+error: --scheme must be ftcs or cn, got 'implicit'
+error: --r must be above 0 and at most 100, got 0
+error: --r must be above 0 and at most 100, got 200
+error: --t must be above 0 and at most 10, got 0
+error: --t must be above 0 and at most 10, got 20
+error: --t / --r would take more than 6000 steps; use a larger --r or a smaller --t
+error: --t is smaller than a single time step (0.004)
+error: --r must be a number, got 'abc'
